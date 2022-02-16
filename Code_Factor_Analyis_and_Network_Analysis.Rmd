@@ -1,0 +1,478 @@
+---
+title: 'Code: Factor Analyis and GGM'
+author: "Nina Illum"
+date: "18/1/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r Basic packages, include=FALSE}
+
+# install necessary packages
+#install.packages("")
+
+# load basic packages
+library(tidyverse)
+
+# load packages for factor analysis
+library(psych)
+library(paran)
+
+# load packages for network models
+library("qgraph")
+library("bootnet")
+library(ggpubr)
+
+```
+
+
+```{r Load data, include=FALSE}
+
+# load anonymized data
+data_final <- read_csv("data//data_anonymous.csv") %>%
+  as.tibble()
+
+```
+
+```{r Demographics}
+
+# estimate age demographics of sample
+# mean age
+mean(data_final$age)
+# standard deviation
+sd(data_final$age)
+# age range (min & max)
+min(data_final$age)
+max(data_final$age)
+
+```
+
+
+```{r Subdata}
+
+# Inner Speech questions data
+inner_speech_full <- data_final[c(5:39)]
+
+# Inner Speech questions data with only the 26 items found by Alderson-Day et al. (2018)
+inner_speech <- data_final[c(5:24, 29, 31:32, 35:36, 39)]
+
+# Rumination questions data
+rumination <- data_final[c(40:61)]
+
+# factor scores for inner speech and rumination items will be combined with the depresson item scores in the depression dataframe
+# Depression questions data
+depression <- data_final[c(62:70)]
+# Extra dataframe for Polychoric fa()
+depression_Polychoric <- data_final[c(62:70)]
+# Extra dataframe for Bartlett factanal()
+depression_Bartlett <- data_final[c(62:70)]
+# Extra dataframe for Pearson + Bartlett fa()
+depression_Pearson <- data_final[c(62:70)]
+
+```
+
+
+
+
+
+
+## Data Screening
+
+### Inner speech
+
+```{r Correlation Estimates + Parallel Analysis (IS)}
+
+### Create Polychoric correlation matrix
+# divide likert-scores because polychoric() only allows max 8 categories per item
+inner_speech_max8 <- inner_speech / 2
+# run polychoric correlations on inner speech data
+poly_values_IS <- polychoric(inner_speech_max8)
+# extracts and saves polychoric corrs as data frame
+polycor_IS <- poly_values_IS$rho
+
+
+# Kaiser-Meyer-Olkin measure (KMO)
+KMO(polycor_IS)
+
+# Bartlett's test of sphericity
+cortest.bartlett(polycor_IS, n = 109)
+
+
+### Horn's Parallel Analysis of Principal Components/Factors
+# scree plot
+paran(inner_speech, cfa = T, graph = T, iterations = 100) # 5 factors should be retained
+
+```
+
+### Rumination
+
+```{r Correlation Estimates + Parallel Analysis (Rumination)}
+
+### Create Polychoric correlation matrix
+# divide likert-scores because polychoric() only allows max 8 categories per item
+rumination_max8 <- rumination / 3
+# run polychoric correlations on rumination data
+poly_values_R <- polychoric(rumination_max8)
+# extracts and saves polychoric corrs as data frame
+polycor_R <- poly_values_R$rho
+
+# Kaiser-Meyer-Olkin measure (KMO)
+KMO(polycor_R)
+
+# Bartlett's test of sphericity
+cortest.bartlett(polycor_R, n = 109)
+
+
+### Horn's Parallel Analysis of Principal Components/Factors
+# scree plot
+paran(rumination, cfa = T,graph = T, iterations = 100) # 3 factors should be retained
+
+
+```
+
+
+
+
+
+
+## Factor Analysis
+
+```{r Inner Speech Factor analysis (POLYCHORIC in fa())}
+
+## polychoric correlation matrix
+# divide likert-scores because polychoric() only allows max 8 categories per item
+inner_speech_max8 <- inner_speech / 2
+
+## factor analysis: Assumes ordinal data and performs polychoric correlations
+fa_IS_Polychoric <- fa(inner_speech_max8, nfactors = 5, rotate = "oblimin", scores = "Bartlett", cor = "poly")
+
+print(fa_IS_Polychoric$loadings, cutoff = .4, sort = F)
+
+# check out the scores for each item
+#fa_IS_Polychoric$scores
+
+# save factor scores in original dataframe (only with standard factanal() and Pearson correlations)
+depression_Polychoric$is_f1 <- fa_IS_Polychoric$scores[,"MR2"]
+depression_Polychoric$is_f2 <- fa_IS_Polychoric$scores[,"MR1"]
+depression_Polychoric$is_f3 <- fa_IS_Polychoric$scores[,"MR5"]
+depression_Polychoric$is_f4 <- fa_IS_Polychoric$scores[,"MR3"]
+depression_Polychoric$is_f5 <- fa_IS_Polychoric$scores[,"MR4"]
+
+```
+
+
+
+```{r Inner Speech Factor analysis (PEARSON in fa())}
+
+## factor analysis: Assumes continuous data and performs Pearson correlations
+fa_IS_Pearson <- fa(inner_speech, nfactors = 5, rotate = "oblimin", scores = "Bartlett", cor = "cor")
+
+# print factor loadings
+print(fa_IS_Pearson$loadings, cutoff = .27, sort = F)
+
+# check out the scores for each item
+#fa_IS_Pearson$scores
+
+depression_Pearson$is_f1 <- fa_IS_Pearson$scores[,"MR2"]
+depression_Pearson$is_f2 <- fa_IS_Pearson$scores[,"MR3"]
+depression_Pearson$is_f3 <- fa_IS_Pearson$scores[,"MR5"]
+depression_Pearson$is_f4 <- fa_IS_Pearson$scores[,"MR1"]
+depression_Pearson$is_f5 <- fa_IS_Pearson$scores[,"MR4"]
+
+```
+
+
+
+```{r Rumination Factor analysis (POLYCHORIC in fa())}
+
+# divide likert-scores because polychoric() only allows max 8 categories per item
+rumination_max8 <- rumination / 3
+
+### Alternative fa() function
+fa_R_Polychoric <- fa(rumination_max8, nfactors = 3, rotate = "oblimin", scores = "Bartlett", cor = "poly")
+
+# print factor loadings
+print(fa_R_Polychoric$loadings, cutoff = .4, sort = F)
+
+# check out the scores for each item
+#fa_R_Polychoric$scores
+
+depression_Polychoric$r_f1 <- fa_R_Polychoric$scores[,"MR1"]
+depression_Polychoric$r_f2 <- fa_R_Polychoric$scores[,"MR3"]
+depression_Polychoric$r_f3 <- fa_R_Polychoric$scores[,"MR2"]
+
+```
+
+```{r Rumination Factor analysis (PEARSON in fa())}
+
+### Alternative fa() function
+fa_R_Pearson <- fa(rumination, nfactors = 3, rotate = "oblimin", scores = "Bartlett", cor = "cor")
+
+# print factor loadings
+print(fa_R_Pearson$loadings, cutoff = .25, sort = F)
+
+# check out the scores for each item
+#fa_R_Pearson$scores
+
+depression_Pearson$r_f1 <- fa_R_Pearson$scores[,"MR1"]
+depression_Pearson$r_f2 <- fa_R_Pearson$scores[,"MR3"]
+depression_Pearson$r_f3 <- fa_R_Pearson$scores[,"MR2"]
+
+```
+
+
+
+
+
+
+
+
+## Network models
+
+```{r Groups and names}
+
+group2_D <- c(1:9) # depression items
+#"D_1", "D_2", "D_3", "D_4", "D_5", "D_6", "D_7", "D_8", "D_9")
+
+group2_IS <- c(10:14) # inner speech items
+#"is_f1"   "is_f2"  "is_f3"   "is_f4"   "is_f5"
+
+group2_R <- c(15:17) # rumination items
+#"r_f1"    "r_f2"    "r_f3"
+
+# list questionnaire groups
+q_groups2 <- list(group2_IS, group2_R, group2_D)
+
+# labels for nodes in the plot
+node_labels <- c("D1", "D2", "D3", "D4", "D5", "D6", "D7", "D8", "D9", "C", "E", "O", "P", "D", "B", "DR", "R")
+#node_labels <- c("D1", "D2", "D3", "D4", "D5", "D6", "D7", "D8", "D9", "IS1", "IS2", "IS3", "IS4", "IS5", "R1", "R2", "R3")
+
+# real names for nodes in the plot
+node_names <- c("Little interest/pleasure", "Feeling down", "Sleep troubles", "Low energy", "Appetite troubles", "Feeling bad about yourself", "Concentration troubles", "Behavioral tempo troubles", "Self-harm or suicidal thoughts", "Condensed", "Evaluative/critical", "Other people", "Positive/regulatory", "Dialogic", "Brooding", "Depression-Related", "Reflection")
+
+```
+
+
+```{r Network Estimation (POLYCHORIC in fa())}
+
+# estimate network structure
+Network_Polychoric <- estimateNetwork(depression_Polychoric, default = "ggmModSelect")
+
+# checking the effect of different tuning parameters
+#Network_Polychoric.25 <- estimateNetwork(depression_Polychoric, default = "ggmModSelect", tuning = 0.25) # 0.25
+
+#Network_Polychoric.5 <- estimateNetwork(depression_Polychoric, default = "ggmModSelect", tuning = 0.5) # 0.5
+
+# review edges
+Network_Polychoric$results
+Network_Polychoric$graph
+
+# plot network
+poly_network <- plot(Network_Polychoric,
+     layout = "spring",
+     theme = "colorblind",
+     labels = node_labels,
+     label.scale = T,
+     label.cex = 2,
+     label.font = 6,
+     groups = q_groups2,
+     legend = T,
+     legend.mode = "names",
+     nodeNames = node_names,
+     legend.cex = 0.6,
+     GLratio = 2,
+     title = "Gaussian Graphical Model Network")
+
+```
+
+```{r Network Estimation (PEARSON CORRELATIONS)}
+
+# estimate network structure
+Network_Pearson <- estimateNetwork(depression_Pearson, default = "ggmModSelect")
+
+# review edges
+Network_Pearson$results
+
+# plot network
+pear_network <- plot(Network_Pearson,
+     layout = "spring",
+     theme = "colorblind",
+     labels = node_labels,
+     label.scale = T,
+     label.font = 6,
+     groups = q_groups2,
+     legend = T,
+     legend.mode = "names",
+     nodeNames = node_names,
+     legend.cex = 0.4,
+     GLratio = 2,
+     title = "Assumption of continuous data (Pearson)")
+
+```
+
+
+```{r Network Estimation without IS1 node (nonode)}
+
+depression_nonode <- depression_Polychoric[, c("D_1", "D_2", "D_3", "D_4", "D_5", "D_6", "D_7", "D_8", "D_9", "is_f2", "is_f3", "is_f4", "is_f5", "r_f1", "r_f2", "r_f3")]
+
+# estimate network structure
+Network_nonode <- estimateNetwork(depression_nonode, default = "ggmModSelect")
+
+# review edges
+Network_nonode$results
+
+
+
+### PLOTTING
+
+# create groups for each questionnaire
+group2_D_nonode <- c(1:9)
+#"D_1", "D_2", "D_3", "D_4", "D_5", "D_6", "D_7", "D_8", "D_9")
+
+group2_IS_nonode <- c(10:13)
+#"is_f2"  "is_f3"   "is_f4"   "is_f5"
+
+group2_R_nonode <- c(14:16)
+#"r_f1"    "r_f2"    "r_f3"
+
+# list questionnaire groups
+q_groups2_nonode <- list(group2_IS_nonode, group2_R_nonode, group2_D_nonode)
+
+# labels without IS1 node
+node_labels_nonode <- c("D1", "D2", "D3", "D4", "D5", "D6", "D7", "D8", "D9", "E", "O", "P", "D", "B", "DR", "R")
+#node_labels_nonode <- c("D1", "D2", "D3", "D4", "D5", "D6", "D7", "D8", "D9", "IS2", "IS3", "IS4", "IS5", "R1", "R2", "R3")
+
+# plot network (just to check)
+#plot(Network_nonode,
+#     layout = "spring",
+#     labels = node_labels_nonode,
+#     groups = q_groups2_nonode,
+#     theme = "colorblind")
+
+
+```
+
+
+## Network Model Estimations
+
+```{r Computing centrality indices}
+
+# plot centrality (fa() network)
+central_plot <- centralityPlot(Network_Polychoric, include = c("Strength", "Betweenness", "Closeness"))
+
+### NONODE
+# plot centrality without Inner Speech item 5 (Condensed speech)
+#centralityPlot(Network_nonode, include = c("Strength", "Betweenness", "Closeness"))
+
+```
+
+
+
+```{r Edge-weight accuracy}
+
+# bootstrap method
+boot1 <- bootnet(Network_Polychoric, nBoots = 2500, nCores = 8, statistics = c("edge", "strength", "closeness", "betweenness")) # OBS!! Takes a while to run (min. 1 hour)
+# standard nBoots = 1000, Epskamp recommendation = 2500
+
+# print overview with characteristics of the sample network
+print(boot1)
+
+# plot bootstrapped CIs for estimated edge parameters
+edge_plot <- plot(boot1, labels = FALSE, order = "sample")
+
+```
+
+
+```{r Centrality stability}
+
+# estimatingbased on data subsets (case-dropping bootstrap)
+boot2 <- bootnet(Network_Polychoric, nBoots = 2500, type = "case", nCores = 8, statistics = c("edge", "strength", "closeness", "betweenness")) # OBS!! Takes a while to run
+# standard nBoots = 1000, Epskamp recommendation = 2500
+
+summary(boot2, statistics = c("edge", "intercept","strength", "closeness", "betweenness", "distance"), perNode = F, rank = F)
+
+# plot centrality stability under subsetting
+plot(boot2)
+
+plot(boot2, c("strength", "betweenness", "closeness")) # 'closeness' does not work because the is_f1 node is not connected to any other nodes
+  
+# calculate CS-coefficient
+CS_coef <- corStability(boot2)
+print(CS_coef)
+
+```
+
+
+
+```{r Centrality stability without IS1 node (nonode)}
+
+# estimating based on data subsets (case-dropping bootstrap)
+boot2_nonode <- bootnet(Network_nonode, nBoots = 2500, type = "case", nCores = 8, statistics = c("edge", "strength", "closeness", "betweenness")) # OBS!! Takes a while to run
+# standard nBoots = 1000, Epskamp recommendation = 2500
+
+# plot centrality stability under subsetting
+plot(boot2_nonode, c("strength", "betweenness", "closeness"))
+
+# calculate CS-coefficient (for comparison with full network)
+#corStability(boot2)
+
+#summary(boot2, statistics = c("edge", "intercept","strength", "closeness", "betweenness", "distance"), perNode = F, rank = F)
+summary(boot2_nonode)
+
+# calculate CS-coefficient
+CS_coef_nonode <- corStability(boot2_nonode)
+print(CS_coef_nonode)
+
+```
+
+
+
+```{r Testing for significant differences}
+
+# estimating based on data subsets (non-parametric bootstrap)
+boot1_nonode <- bootnet(Network_nonode, nBoots = 2500, nCores = 8, statistics = c("edge", "strength", "closeness", "betweenness")) # OBS!! Takes a while to run
+# standard nBoots = 1000, Epskamp recommendation = 2500
+
+## plot difference tests between all pairs of edges and centrality indices
+# node edge-weights
+plot(boot1, "edge", plot = "difference", onlyNonZero = TRUE, order = "sample")
+
+# node strength centrality
+plot(boot1, "strength")
+
+# node betweenness centrality
+plot(boot1, "betweenness")
+
+# node closeness centrality (without the IS_1 node)
+plot(boot1_nonode, "closeness")
+
+```
+
+
+```{r Plots}
+
+### NETWORK MODELS
+#ggarrange(poly_network, pear_network, nrow = 1) # not possible because of qgraph class - used other programme
+
+### GGM Network + Centrality Indices
+#ggarrange(poly_network, central_plot, nrow = 1) # not possible because of qgraph class - used other programme
+
+# define plots for each centrality estimates
+str_plot <- plot(boot2, "strength")
+bet_plot <- plot(boot2, "betweenness")
+clo_plot <- plot(boot2_nonode, "closeness")
+
+# plot grid with the 3 centrality estimates
+casedrop_central_plot <- ggarrange(str_plot, bet_plot, clo_plot, nrow = 1)
+# plot grid with central indices
+ggarrange(central_plot, casedrop_central_plot, nrow = 2, heights = c(1,1))
+
+# plot grid with edge weight accuracy and centrality estimates
+ggarrange(edge_plot, central_plot, nrow = 2, heights = c(1,1))
+
+```
+
+
